@@ -1,7 +1,7 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 
-name: Build and deploy JAR app to Azure Web App - spaceplanets
+name: Build and deploy PHP app to Azure Web App - spaceplanets
 
 on:
   push:
@@ -11,28 +11,37 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Java version
-        uses: actions/setup-java@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
         with:
-          java-version: '21'
-          distribution: 'microsoft'
+          php-version: '8.2'
 
-      - name: Build with Maven
-        run: mvn clean install
+      - name: Check if composer.json exists
+        id: check_files
+        uses: andstor/file-existence-action@v1
+        with:
+          files: 'composer.json'
+
+      - name: Run composer install if composer.json exists
+        if: steps.check_files.outputs.files_exists == 'true'
+        run: composer validate --no-check-publish && composer install --prefer-dist --no-progress
+
+      - name: Zip artifact for deployment
+        run: zip release.zip ./* -r
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
-          name: java-app
-          path: '${{ github.workspace }}/target/*.jar'
+          name: php-app
+          path: release.zip
 
   deploy:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     needs: build
     environment:
       name: 'Production'
@@ -44,20 +53,23 @@ jobs:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
-          name: java-app
+          name: php-app
+
+      - name: Unzip artifact for deployment
+        run: unzip release.zip
       
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_83FEAB883CA2406DAFEAE4EEA642686E }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_46D4F76C0844474FA8F3469FEF80F837 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_2151ECCA2B3B456CA33BE80A40116C81 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_68D7F872BB73463E90073082DD8A573F }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_412B0893784E4C3898DC6770F13DD0AD }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_83D6AA9C070A4313BBA7C536271235E5 }}
 
-      - name: Deploy to Azure Web App
-        id: deploy-to-webapp
+      - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
+        id: deploy-to-webapp
         with:
           app-name: 'spaceplanets'
           slot-name: 'Production'
-          package: '*.jar'
+          package: .
           
